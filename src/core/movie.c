@@ -4,12 +4,15 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #include <mgba/core/movie.h>
-#include <mgba/core/core.h>
+
 #include <mgba/core/serialize.h>
 #include <mgba-util/vfs.h>
 #include <stdlib.h>
 #include <string.h>
+
 #define INITIAL_CAPACITY 1024
+#define MOVIE_MAGIC 0x314D474D // "MGM1"
+
 struct mMovie* mMovieCreate(void) {
 	struct mMovie* movie = malloc(sizeof(struct mMovie));
 	movie->mode = MOVIE_STOP;
@@ -19,6 +22,7 @@ struct mMovie* mMovieCreate(void) {
 	movie->inputs = malloc(sizeof(uint16_t) * movie->capacity);
 	return movie;
 }
+
 void mMovieDestroy(struct mMovie* movie) {
 	if (!movie) {
 		return;
@@ -26,12 +30,13 @@ void mMovieDestroy(struct mMovie* movie) {
 	free(movie->inputs);
 	free(movie);
 }
+
 void mMovieReset(struct mMovie* movie) {
 	movie->mode = MOVIE_STOP;
 	movie->currentFrame = 0;
 	movie->frameCount = 0;
 }
-#define MOVIE_MAGIC 0x314D474D // "MGM1"
+
 bool mMovieLoad(struct mMovie* movie, struct VFile* vf) {
 	if (!vf) {
 		return false;
@@ -45,6 +50,7 @@ bool mMovieLoad(struct mMovie* movie, struct VFile* vf) {
 	if (magic != MOVIE_MAGIC) {
 		return false;
 	}
+
 	vf->read(vf, &movie->frameCount, sizeof(uint32_t));
 	if (movie->frameCount > movie->capacity) {
 		movie->inputs = realloc(movie->inputs, sizeof(uint16_t) * movie->frameCount);
@@ -52,9 +58,10 @@ bool mMovieLoad(struct mMovie* movie, struct VFile* vf) {
 	}
 	vf->read(vf, movie->inputs, sizeof(uint16_t) * movie->frameCount);
 	movie->currentFrame = 0;
-	movie->mode = MOVIE_PLAY; // Default to play on load
+	movie->mode = MOVIE_PLAY;
 	return true;
 }
+
 bool mMovieSave(struct mMovie* movie, struct VFile* vf) {
 	if (!vf) {
 		return false;
@@ -65,31 +72,11 @@ bool mMovieSave(struct mMovie* movie, struct VFile* vf) {
 	vf->write(vf, movie->inputs, sizeof(uint16_t) * movie->frameCount);
 	return true;
 }
-void mMovieHookRunFrame(struct mMovie* movie, struct mCore* core) {
-	if (movie->mode == MOVIE_STOP) {
+
+void mMovieHookStateLoaded(struct mMovie* movie, const struct mStateExtdata* extdata) {
+	if (!movie) {
 		return;
 	}
-	if (movie->mode == MOVIE_PLAY) {
-		if (movie->currentFrame < movie->frameCount) {
-			core->setKeys(core, movie->inputs[movie->currentFrame]);
-			movie->currentFrame++;
-		} else {
-			movie->mode = MOVIE_STOP; // End of movie
-		}
-	} else if (movie->mode == MOVIE_RECORD) {
-		uint32_t keys = core->getKeys(core);
-		if (movie->currentFrame >= movie->capacity) {
-			movie->capacity *= 2;
-			movie->inputs = realloc(movie->inputs, sizeof(uint16_t) * movie->capacity);
-		}
-		movie->inputs[movie->currentFrame] = keys;
-		movie->currentFrame++;
-		if (movie->currentFrame > movie->frameCount) {
-			movie->frameCount = movie->currentFrame;
-		}
-	}
-}
-void mMovieHookStateLoaded(struct mMovie* movie, const struct mStateExtdata* extdata) {
 	struct mStateExtdataItem item;
 	if (mStateExtdataGet(extdata, EXTDATA_FEATURE_MOVIE, &item)) {
 		if ((uint32_t) item.size == sizeof(uint32_t)) {
@@ -97,7 +84,11 @@ void mMovieHookStateLoaded(struct mMovie* movie, const struct mStateExtdata* ext
 		}
 	}
 }
+
 void mMovieHookStateSaved(struct mMovie* movie, struct mStateExtdata* extdata) {
+	if (!movie) {
+		return;
+	}
 	struct mStateExtdataItem item;
 	item.size = sizeof(uint32_t);
 	item.data = malloc(item.size);

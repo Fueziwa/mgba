@@ -18,6 +18,7 @@
 #include <mgba/core/core.h>
 #include <mgba/core/config.h>
 #include <mgba/core/input.h>
+#include <mgba/core/movie.h>
 #include <mgba/core/serialize.h>
 #include <mgba/core/thread.h>
 #include <mgba/internal/gba/input.h>
@@ -209,19 +210,25 @@ int mSDLRun(struct mSDLRenderer* renderer, struct mArguments* args) {
 	mCoreAutoloadSave(renderer->core);
 	mArgumentsApplyFileLoads(args, renderer->core);
 
+	struct mMovie* movie = NULL;
 	if (args->moviePlay) {
+		movie = mMovieCreate();
 		struct VFile* vf = VFileOpen(args->moviePlay, O_RDONLY);
 		if (vf) {
-			mMovieLoad(renderer->core->movie, vf);
+			mMovieLoad(movie, vf);
 			vf->close(vf);
+			// Movie will be attached after thread starts
 		} else {
 			printf("Could not open movie file for playback: %s\n", args->moviePlay);
+			mMovieDestroy(movie);
+			movie = NULL;
 		}
+	} else if (args->movieRecord) {
+		movie = mMovieCreate();
+		movie->mode = MOVIE_RECORD;
+		// Movie will be attached after thread starts
 	}
 
-	if (args->movieRecord && !args->moviePlay) {
-		renderer->core->movie->mode = MOVIE_RECORD;
-	}
 #ifdef ENABLE_SCRIPTING
 	struct mScriptBridge* bridge = mScriptBridgeCreate();
 #ifdef ENABLE_PYTHON
@@ -253,6 +260,11 @@ int mSDLRun(struct mSDLRenderer* renderer, struct mArguments* args) {
 	thread.logger.logger = &_logger.d;
 
 	bool didFail = !mCoreThreadStart(&thread);
+
+	// Attach movie after thread starts (impl is now available)
+	if (movie && !didFail) {
+		mCoreThreadSetMovie(&thread, movie);
+	}
 
 	if (!didFail) {
 #if SDL_VERSION_ATLEAST(2, 0, 0)
@@ -297,14 +309,19 @@ int mSDLRun(struct mSDLRenderer* renderer, struct mArguments* args) {
 		printf("Could not run game. Are you sure the file exists and is a compatible game?\n");
 	}
 
-	if (args->movieRecord) {
+	if (args->movieRecord && movie) {
 		struct VFile* vf = VFileOpen(args->movieRecord, O_WRONLY | O_CREAT | O_TRUNC);
 		if (vf) {
-			mMovieSave(renderer->core->movie, vf);
+			mMovieSave(movie, vf);
 			vf->close(vf);
 		} else {
 			printf("Could not save movie file: %s\n", args->movieRecord);
 		}
+	}
+
+	if (movie) {
+		mCoreThreadSetMovie(&thread, NULL);
+		mMovieDestroy(movie);
 	}
 
 	renderer->core->unloadROM(renderer->core);

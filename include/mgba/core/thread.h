@@ -94,6 +94,7 @@ struct mCoreThreadInternal {
 
 	struct mCoreSync sync;
 	struct mCoreRewindContext rewind;
+	struct mMovie* movie;
 	struct mCore* core;
 };
 
@@ -127,6 +128,9 @@ void mCoreThreadClearCrashed(struct mCoreThread* threadContext);
 
 void mCoreThreadSetRewinding(struct mCoreThread* threadContext, bool);
 void mCoreThreadRewindParamsChanged(struct mCoreThread* threadContext);
+
+struct mMovie;
+void mCoreThreadSetMovie(struct mCoreThread* threadContext, struct mMovie* movie);
 
 struct mCoreThread* mCoreThreadGet(void);
 

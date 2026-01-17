@@ -10,7 +10,6 @@
 
 CXX_GUARD_START
 
-struct mCore;
 struct mStateExtdata;
 struct VFile;
 
@@ -35,7 +34,6 @@ void mMovieReset(struct mMovie* movie);
 bool mMovieLoad(struct mMovie* movie, struct VFile* vf);
 bool mMovieSave(struct mMovie* movie, struct VFile* vf);
 
-void mMovieHookRunFrame(struct mMovie* movie, struct mCore* core);
 void mMovieHookStateLoaded(struct mMovie* movie, const struct mStateExtdata* extdata);
 void mMovieHookStateSaved(struct mMovie* movie, struct mStateExtdata* extdata);
 

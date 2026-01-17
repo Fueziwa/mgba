@@ -11,6 +11,7 @@
 #include <mgba/core/scripting.h>
 #endif
 #include <mgba/core/serialize.h>
+#include <mgba/core/movie.h>
 #include <mgba-util/patch.h>
 #include <mgba-util/vfs.h>
 
@@ -156,6 +157,30 @@ void _frameStarted(void* context) {
 			thread->impl->rewind.rewindFrameCounter--;
 		}
 	}
+
+	// Handle movie record/playback at frame start (before execution)
+	struct mMovie* movie = thread->impl->movie;
+	if (movie && movie->mode != MOVIE_STOP) {
+		if (movie->mode == MOVIE_PLAY) {
+			// Playback: inject keys from movie
+			if (movie->currentFrame < movie->frameCount) {
+				thread->core->setKeys(thread->core, movie->inputs[movie->currentFrame]);
+			} else {
+				movie->mode = MOVIE_STOP;
+			}
+		} else if (movie->mode == MOVIE_RECORD) {
+			// Record: capture current keys
+			uint32_t keys = thread->core->getKeys(thread->core);
+			if (movie->currentFrame >= movie->capacity) {
+				movie->capacity *= 2;
+				movie->inputs = realloc(movie->inputs, sizeof(uint16_t) * movie->capacity);
+			}
+			movie->inputs[movie->currentFrame] = keys;
+			if (movie->currentFrame >= movie->frameCount) {
+				movie->frameCount = movie->currentFrame + 1;
+			}
+		}
+	}
 }
 
 void _frameEnded(void* context) {
@@ -163,6 +188,13 @@ void _frameEnded(void* context) {
 	if (!thread) {
 		return;
 	}
+
+	// Increment movie frame counter after frame execution
+	struct mMovie* movie = thread->impl->movie;
+	if (movie && movie->mode != MOVIE_STOP) {
+		movie->currentFrame++;
+	}
+
 	if (thread->frameCallback) {
 		thread->frameCallback(thread);
 	}
@@ -684,6 +716,14 @@ void mCoreThreadRewindParamsChanged(struct mCoreThread* threadContext) {
 	} else {
 		 mCoreRewindContextDeinit(&threadContext->impl->rewind);
 	}
+}
+
+void mCoreThreadSetMovie(struct mCoreThread* threadContext, struct mMovie* movie) {
+	MutexLock(&threadContext->impl->stateMutex);
+	threadContext->impl->movie = movie;
+	// Also set core->movie for state hook compatibility
+	threadContext->core->movie = movie;
+	MutexUnlock(&threadContext->impl->stateMutex);
 }
 
 void mCoreThreadWaitFromThread(struct mCoreThread* threadContext) {

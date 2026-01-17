@@ -156,10 +156,6 @@ static bool _GBCoreInit(struct mCore* core) {
 	mDirectorySetInit(&core->dirs);
 #endif
 
-#ifndef MINIMAL_CORE
-	core->movie = mMovieCreate();
-#endif
-
 	return true;
 }
 
@@ -170,10 +166,6 @@ static void _GBCoreDeinit(struct mCore* core) {
 	mappedMemoryFree(core->board, sizeof(struct GB));
 #if defined(ENABLE_VFS) && defined(ENABLE_DIRECTORIES)
 	mDirectorySetDeinit(&core->dirs);
-#endif
-
-#ifndef MINIMAL_CORE
-	mMovieDestroy(core->movie);
 #endif
 
 #ifdef ENABLE_DEBUGGERS
@@ -743,18 +735,13 @@ static void _GBCoreReset(struct mCore* core) {
 static void _GBCoreRunFrame(struct mCore* core) {
 	struct GB* gb = core->board;
 	uint32_t frameCounter = gb->video.frameCounter;
-
-#ifndef MINIMAL_CORE
-	mMovieHookRunFrame(core->movie, core);
-#endif
-
 	while (gb->video.frameCounter == frameCounter) {
 		SM83Run(core->cpu);
 	}
 }
 
 static void _GBCoreRunLoop(struct mCore* core) {
-	_GBCoreRunFrame(core);
+	SM83Run(core->cpu);
 }
 
 static void _GBCoreStep(struct mCore* core) {
